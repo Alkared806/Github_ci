@@ -1,0 +1,58 @@
+image: mcr.microsoft.com/dotnet/core/sdk:3.1
+
+before_script:
+  - $PSVersionTable.PSVersion
+  - dotnet --version
+  - nuget help | select-string Version
+
+stages:
+  - build
+  - test
+  - deploy
+
+build-job:
+  stage: build
+  script:
+    - dotnet build -c Release
+  tags:
+    - windows
+  only:
+    - merge_requests
+    - master
+
+test and cover job:
+  stage: test
+  tags:
+    - windows
+  script:
+    - dotnet test -c Release /p:CollectCoverage=true
+  coverage: /\|\s*Total\s*\|\s*(\d+[,.]\d+%)/
+  only:
+    - merge_requests
+    - master
+
+pack and deploy job:
+  stage: deploy
+  tags:
+    - windows
+  script:
+    - dotnet pack -c Release -o .
+    - dotnet new nugetconfig
+    - nuget sources add -name TestAlkared -source https://pkgs.dev.azure.com/malozemov-sasha/e7c7375a-14b7-410e-9f3e-01c04debe686/_packaging/feed1/nuget/v3/index.json -username malozemov-sasha -password $menu -configfile nuget.config -StorePasswordInClearText
+    - nuget push -source TestAlkared -skipduplicate -apikey az *.nupkg -skipduplicate
+  only:
+    - master
+
+pages:
+  tags:
+    - windows
+  stage: deploy
+  script:
+    - nuget install docfx.console -version 2.51.0
+    - $env:path = "$env:path;$($(get-location).Path)"
+    - .\docfx.console.2.51.0\tools\docfx.exe .\docfx\docfx.json
+  artifacts:
+    paths:
+      - public
+  only:
+    - master
